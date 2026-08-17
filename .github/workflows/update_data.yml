@@ -1,0 +1,58 @@
+name: Daily Retractions Data Update
+
+on:
+  schedule:
+    # Runs at 00:00 UTC every day
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allows you to run this manually from the Actions tab
+
+permissions:
+  contents: write # Needed to push the updated JSON files back to the repository
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests google-genai
+
+      - name: Fetch Data from OpenAlex
+        run: python scripts/fetch_retractions.py
+
+      - name: AI Categorization (Gemini API)
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: python scripts/ai_classify.py
+
+      - name: Institutional Sentinel Alerts
+        env:
+          EMAIL_SENDER: ${{ secrets.EMAIL_SENDER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+        run: python scripts/send_alerts.py
+
+      - name: Commit and Push Changes
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          
+          # Add the data folder where JSONs are saved
+          git add data/
+          
+          # Check if there are any changes to commit
+          if git diff --staged --quiet; then
+            echo "No new data to commit. Skipping."
+          else
+            git commit -m "Auto-update: Fetched latest retractions, ran AI & alerts"
+            git push
+          fi
