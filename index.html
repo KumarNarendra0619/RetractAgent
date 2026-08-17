@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RetractRadar | Academic Integrity Platform</title>
+    
+    <!-- UI & Styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Analytics & Visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    
+    <!-- Search & Export -->
+    <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body class="bg-gray-50 min-h-screen font-sans text-gray-900">
+
+    <!-- Header -->
+    <header class="bg-white shadow-sm border-b border-gray-200">
+        <div class="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8">
+            <h1 class="text-3xl font-extrabold tracking-tight text-gray-900">Retract<span class="text-red-600">Radar</span></h1>
+            <p class="mt-2 text-sm text-gray-500">Automated intelligence tracking for academic retractions.</p>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
+        
+        <!-- Live DOI Validator -->
+        <div class="mb-6 bg-blue-50 border border-blue-200 p-4 rounded-lg flex flex-col md:flex-row items-center gap-4 shadow-sm">
+            <div class="flex-grow w-full">
+                <label for="doi-check" class="block text-sm font-bold text-blue-900 mb-1">Live DOI Verification (Crossref & PubPeer)</label>
+                <div class="flex">
+                    <input type="text" id="doi-check" placeholder="Paste DOI here (e.g., 10.1016/...)" class="flex-grow p-2 border border-blue-300 rounded-l-md outline-none">
+                    <button id="btn-check-doi" class="bg-blue-700 text-white px-4 py-2 rounded-r-md hover:bg-blue-800 font-semibold transition">Verify</button>
+                </div>
+            </div>
+            <div id="doi-result" class="w-full md:w-1/3 flex items-center justify-center p-3 rounded-md font-bold text-sm text-center bg-gray-200 text-gray-600">
+                Enter a DOI to verify status.
+            </div>
+        </div>
+
+        <!-- Main Navigation Toggles -->
+        <div class="flex flex-wrap gap-3 mb-6 items-center">
+            <button id="view-lockers" class="nav-btn px-4 py-2 bg-blue-600 text-white font-medium rounded shadow transition">University Lockers</button>
+            <button id="view-articles" class="nav-btn px-4 py-2 bg-gray-200 text-gray-800 font-medium rounded shadow hover:bg-gray-300 transition">All Articles</button>
+            <button id="view-analytics" class="nav-btn px-4 py-2 bg-gray-200 text-gray-800 font-medium rounded shadow hover:bg-gray-300 transition">Analytics</button>
+            <button id="view-map" class="nav-btn px-4 py-2 bg-gray-200 text-gray-800 font-medium rounded shadow hover:bg-gray-300 transition">Global Map</button>
+            <button id="view-network" class="nav-btn px-4 py-2 bg-gray-200 text-gray-800 font-medium rounded shadow hover:bg-gray-300 transition">Network</button>
+            <button id="view-publishers" class="nav-btn px-4 py-2 bg-gray-200 text-gray-800 font-medium rounded shadow hover:bg-gray-300 transition">Publisher Scorecard</button>
+            <button id="view-scanner" class="nav-btn px-4 py-2 bg-purple-600 text-white font-medium rounded shadow hover:bg-purple-700 transition">Risk Scanner</button>
+            
+            <button id="export-csv" class="ml-auto px-4 py-2 bg-green-600 text-white font-medium rounded shadow hover:bg-green-700 transition flex items-center gap-2">
+                Download CSV
+            </button>
+        </div>
+
+        <!-- Search & AI Filters -->
+        <div id="search-controls" class="mb-6">
+            <div id="filter-pills" class="flex flex-wrap gap-2 mb-3">
+                <button onclick="filterByReason('ALL')" class="pill-btn active px-3 py-1 bg-gray-900 text-white text-xs font-semibold rounded-full">All Categories</button>
+                <button onclick="filterByReason('Paper Mill / Fake Peer Review')" class="pill-btn px-3 py-1 bg-gray-200 text-gray-700 text-xs font-semibold rounded-full hover:bg-gray-300">Paper Mills</button>
+                <button onclick="filterByReason('Data Fabrication / Manipulation')" class="pill-btn px-3 py-1 bg-gray-200 text-gray-700 text-xs font-semibold rounded-full hover:bg-gray-300">Data Fabrication</button>
+                <button onclick="filterByReason('Plagiarism / Text Recycling')" class="pill-btn px-3 py-1 bg-gray-200 text-gray-700 text-xs font-semibold rounded-full hover:bg-gray-300">Plagiarism</button>
+                <button onclick="filterByReason('Image Manipulation')" class="pill-btn px-3 py-1 bg-gray-200 text-gray-700 text-xs font-semibold rounded-full hover:bg-gray-300">Image Issues</button>
+            </div>
+            <input type="text" id="main-search" placeholder="Search by title, institution, DOI..." class="w-full p-4 border border-gray-300 rounded-lg shadow-sm text-lg focus:ring-2 focus:ring-blue-500 outline-none">
+        </div>
+
+        <!-- View 1: Lockers & Articles Grid -->
+        <div id="results-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+
+        <!-- View 2: Analytics Chart -->
+        <div id="analytics-view" class="hidden mb-8 bg-white p-6 rounded-lg shadow border border-gray-200">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Retractions Over Time</h2>
+            <canvas id="trendChart" height="100"></canvas>
+        </div>
+
+        <!-- View 3: Global Web Map -->
+        <div id="map-view" class="hidden mb-8 bg-white p-6 rounded-lg shadow border border-gray-200">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+                <div>
+                    <h2 class="text-xl font-bold text-gray-800">Spatiotemporal Retractions</h2>
+                    <p class="text-xs text-gray-500">Track geographical shifts across time.</p>
+                </div>
+                <div class="flex items-center gap-3 bg-gray-50 p-2 rounded-lg border border-gray-200">
+                    <button id="btn-play-map" class="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded">▶ Play</button>
+                    <input type="range" id="map-year-slider" min="2010" max="2026" value="2026" class="w-32 cursor-pointer accent-red-600">
+                    <span id="map-year-display" class="font-mono text-sm font-bold bg-white px-2 py-0.5 border rounded">Cumulative</span>
+                </div>
+            </div>
+            <div id="spatial-map" style="height: 520px; width: 100%; border-radius: 8px; z-index: 1;"></div>
+        </div>
+
+        <!-- View 4: Network Graph -->
+        <div id="network-view" class="hidden mb-8 bg-white p-6 rounded-lg shadow border border-gray-200">
+            <h2 class="text-xl font-bold text-gray-800 mb-2">Institutional Co-Authorship Network</h2>
+            <p class="text-sm text-gray-500 mb-4">Nodes represent universities. Lines indicate co-authored retracted papers.</p>
+            <div id="network-canvas" style="height: 600px; width: 100%; border: 1px solid #e5e7eb; border-radius: 8px;"></div>
+        </div>
+
+        <!-- View 5: Publishers Scorecard -->
+        <div id="publishers-view" class="hidden mb-8 bg-white p-6 rounded-lg shadow border border-gray-200">
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">Publisher "Wall of Shame"</h2>
+            <p class="text-sm text-gray-500 mb-6">Ranking publishers by total volume of retracted papers.</p>
+            <div class="overflow-x-auto">
+                <table class="min-w-full text-left text-sm text-gray-600 border-collapse">
+                    <thead class="bg-gray-100 text-gray-800 uppercase font-bold">
+                        <tr>
+                            <th class="px-4 py-3 border-b">Rank</th>
+                            <th class="px-4 py-3 border-b">Publisher Name</th>
+                            <th class="px-4 py-3 border-b">Total Retractions</th>
+                            <th class="px-4 py-3 border-b">Risk Level</th>
+                        </tr>
+                    </thead>
+                    <tbody id="publisher-table-body" class="divide-y divide-gray-200">
+                        <!-- Populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- View 6: AI Risk Scanner -->
+        <div id="scanner-view" class="hidden mb-8 bg-white p-6 rounded-lg shadow border-2 border-purple-200">
+            <div class="flex items-center gap-3 mb-2">
+                <span class="text-2xl">🕵️‍♂️</span>
+                <h2 class="text-2xl font-bold text-gray-800">Pre-Retraction Risk Scanner</h2>
+            </div>
+            <p class="text-sm text-gray-500 mb-4">Paste an abstract or text below. The scanner will detect "Tortured Phrases" (AI-spun text often used to bypass plagiarism checks).</p>
+            <textarea id="risk-text-input" rows="6" class="w-full p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 mb-4 font-mono text-sm outline-none" placeholder="Paste article text or abstract here..."></textarea>
+            <button id="btn-scan-text" class="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg shadow transition">Scan for Risks</button>
+            <div id="scan-results" class="mt-6 hidden p-4 rounded-lg border"></div>
+        </div>
+
+    </main>
+
+    <!-- Modal: Blast Radius -->
+    <div id="blast-radius-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 max-h-[85vh] flex flex-col">
+            <div class="flex justify-between items-start border-b pb-3 mb-4">
+                <div>
+                    <span class="px-2 py-0.5 bg-red-100 text-red-800 text-[10px] font-bold rounded uppercase">Downstream Contamination</span>
+                    <h3 id="modal-article-title" class="font-bold text-lg text-gray-900 mt-1 line-clamp-2">Article Title</h3>
+                </div>
+                <button onclick="closeBlastModal()" class="text-gray-400 hover:text-gray-600 font-bold text-xl ml-4">&times;</button>
+            </div>
+            <div id="modal-body" class="overflow-y-auto flex-grow space-y-3"></div>
+        </div>
+    </div>
+
+    <!-- Main Logic Script -->
+    <script src="app.js"></script>
+</body>
+</html>
